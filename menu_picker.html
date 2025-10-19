@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>무엇을 먹을까 — 랜덤 메뉴 뽑기</title>
+<style>
+  :root{
+    --bg:#0f1724; --card:#0b1220; --accent:#f59e0b; --muted:#9aa4b2;
+    --glass: rgba(255,255,255,0.03);
+    font-family: "Noto Sans KR", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(180deg,#071023 0%, #081426 60%);
+    color:#e6eef6; padding:18px;
+  }
+  .wrap{width:100%; max-width:720px;}
+  header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px}
+  h1{font-size:20px; margin:0}
+  p.sub{margin:0; color:var(--muted); font-size:13px}
+  .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius:14px; padding:18px; box-shadow:0 6px 20px rgba(2,6,23,0.6); border:1px solid rgba(255,255,255,0.03)}
+  .controls{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
+  select, button, .toggle{
+    background:var(--glass); border:1px solid rgba(255,255,255,0.035); color:inherit; padding:10px 12px;
+    border-radius:10px; font-size:15px; min-width:0;
+  }
+  .big-btn{display:block; width:100%; padding:14px; font-size:18px; border-radius:12px; background:var(--accent); color:#071022; border:none; cursor:pointer; font-weight:700}
+  .result{
+    margin-top:14px; padding:18px; border-radius:12px; background:rgba(255,255,255,0.02);
+    display:flex; gap:12px; align-items:center; justify-content:space-between;
+  }
+  .result .left{flex:1}
+  .result .category{font-size:13px; color:var(--muted); margin-bottom:6px}
+  .result .menu{font-size:20px; font-weight:700}
+  .actions{display:flex; gap:8px}
+  .small{padding:8px 10px; font-size:14px}
+  .history{margin-top:12px; color:var(--muted); font-size:13px; max-height:140px; overflow:auto; padding-right:6px}
+  .chip{display:inline-block; background:rgba(255,255,255,0.02); padding:6px 8px; border-radius:8px; margin:4px; font-size:13px}
+  footer{margin-top:12px; color:var(--muted); font-size:12px; text-align:center}
+  @keyframes pop {0%{transform:scale(.96)}50%{transform:scale(1.05)}100%{transform:scale(1)}}
+  .pop{animation:pop .36s ease}
+  @media(min-width:720px){ body{padding:30px} h1{font-size:22px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>오늘 뭐 먹지? — 메뉴 랜덤 뽑기</h1>
+      <p class="sub">카테고리 고정하거나 완전 랜덤. 귀찮음 제로지.</p>
+    </div>
+    <div style="text-align:right">
+      <button id="shareBtn" class="small" title="결과 공유">공유</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="controls">
+      <select id="categorySelect" aria-label="카테고리 선택">
+        <option value="random">🔀 전체 랜덤</option>
+        <option value="양식">🍝 양식</option>
+        <option value="일식">🍣 일식</option>
+        <option value="한식">🍚 한식</option>
+        <option value="분식">🍢 분식</option>
+        <option value="중식">🥡 중식</option>
+        <option value="그외">🌯 그 외</option>
+      </select>
+
+      <label style="display:flex;align-items:center;gap:8px">
+        <input id="onlyDelivery" type="checkbox" style="accent-color:var(--accent)"/>
+        <span style="font-size:14px;color:var(--muted)">배달 우선(상품권 쓰기 좋음)</span>
+      </label>
+
+      <button id="drawBtn" class="big-btn">랜덤 뽑기</button>
+    </div>
+
+    <div class="result" id="resultArea" aria-live="polite">
+      <div class="left">
+        <div class="category" id="resultCategory">카테고리 — 아직</div>
+        <div class="menu" id="resultMenu">버튼을 눌러라. 내가 한다.</div>
+      </div>
+      <div class="actions">
+        <button id="againBtn" class="small">다시</button>
+        <button id="copyBtn" class="small">복사</button>
+      </div>
+    </div>
+
+    <div class="history" id="history" aria-label="최근 선택">
+      <!-- history chips -->
+    </div>
+
+    <footer>
+      메뉴 목록은 직접 편집 가능. (HTML 파일 열어 arrays 수정하면 끝.)
+    </footer>
+  </div>
+</div>
+
+<script>
+(function(){
+  const MENUS = {
+    "양식":[ "알리오올리오","까르보나라","스테이크","감바스","리조또","피자","햄버거","샐러드","오므라이스","라자냐" ],
+    "일식":[ "가츠동","사케동","규동","초밥","우동","돈카츠","일본식 카레","라멘","오꼬노미야끼","타코야끼" ],
+    "한식":[ "제육덮밥","김치찌개","비빔밥","감자탕","순대국","삼겹살","닭갈비","비빔국수","곱창전골","참치마요덮밥" ],
+    "분식":[ "떡볶이","튀김세트","김밥","라면","순대볶음","쫄면","라볶이","어묵탕","돈까스","오므라이스(분식식)" ],
+    "중식":[ "짜장면","짬뽕","간짜장","볶음밥","탕수육","라조기","깐풍기","마파두부밥","유산슬","고추잡채밥" ],
+    "그외":[ "쌀국수","팟타이","타코","부리또","케밥","치킨","나초","버터커리","피쉬앤칩스","빙수" ]
+  };
+
+  const drawBtn = document.getElementById('drawBtn');
+  const againBtn = document.getElementById('againBtn');
+  const copyBtn = document.getElementById('copyBtn');
+  const shareBtn = document.getElementById('shareBtn');
+  const catSel = document.getElementById('categorySelect');
+  const onlyDelivery = document.getElementById('onlyDelivery');
+  const resCat = document.getElementById('resultCategory');
+  const resMenu = document.getElementById('resultMenu');
+  const historyEl = document.getElementById('history');
+
+  let lastResult = null;
+  const hist = [];
+
+  function randInt(n){ return Math.floor(Math.random()*n); }
+  function pickFromCategory(cat){
+    const list = MENUS[cat];
+    return list[randInt(list.length)];
+  }
+
+  function pickRandom(){
+    const chosenCat = catSel.value === 'random' ? Object.keys(MENUS)[randInt(Object.keys(MENUS).length)] : catSel.value;
+    const menu = pickFromCategory(chosenCat);
+    return {cat: chosenCat, menu};
+  }
+
+  function showResult(obj){
+    resCat.textContent = "카테고리 — " + obj.cat;
+    resMenu.textContent = obj.menu;
+    resMenu.classList.remove('pop');
+    void resMenu.offsetWidth; // reflow to restart animation
+    resMenu.classList.add('pop');
+    lastResult = obj;
+    hist.unshift(obj);
+    if(hist.length>12) hist.pop();
+    renderHistory();
+  }
+
+  function renderHistory(){
+    historyEl.innerHTML = "";
+    hist.forEach(h=>{
+      const c = document.createElement('span');
+      c.className = 'chip';
+      c.textContent = `${h.cat} · ${h.menu}`;
+      historyEl.appendChild(c);
+    });
+  }
+
+  drawBtn.addEventListener('click', ()=>{
+    // if onlyDelivery.checked we could filter — but menu list is neutral; just annotate
+    const res = pickRandom();
+    if(onlyDelivery.checked){
+      // gentle nudge: prefer items that typically 배달 가능 (simple heuristic)
+      // We'll attempt up to 6 times to get a "likely 배달" menu (pizza/치킨/떡볶이/분식/중식류 등)
+      const deliveryHints = ["피자","치킨","떡볶이","짜장","짬","돈까스","김밥","햄버거","라면","탕수육","볶음밥"];
+      let attempt = 0;
+      let final = res;
+      while(attempt < 6){
+        if( deliveryHints.some(h=> final.menu.includes(h) ) ) break;
+        final = pickRandom();
+        attempt++;
+      }
+      final.menu = final.menu + " (배달 추천)";
+      showResult(final);
+    } else {
+      showResult(res);
+    }
+  });
+
+  againBtn.addEventListener('click', ()=>{
+    if(!lastResult) { drawBtn.click(); return; }
+    drawBtn.click();
+  });
+
+  copyBtn.addEventListener('click', async ()=>{
+    if(!lastResult) { alert('먼저 뽑아라.'); return; }
+    const text = `${lastResult.cat} — ${lastResult.menu}`;
+    try{
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = '복사 완료';
+      setTimeout(()=>copyBtn.textContent = '복사',1200);
+    }catch(e){
+      alert('복사 실패. 브라우저에서 클립보드 권한을 허용했는지 확인해.');
+    }
+  });
+
+  shareBtn.addEventListener('click', async ()=>{
+    if(!lastResult){ alert('먼저 메뉴를 하나 뽑아라.'); return; }
+    const text = `${lastResult.cat} — ${lastResult.menu}`;
+    if(navigator.share){
+      try{
+        await navigator.share({title:'오늘 뭐 먹지?', text});
+      }catch(e){
+        // share cancelled or failed
+      }
+    }else{
+      // fallback: copy to clipboard
+      try{
+        await navigator.clipboard.writeText(text);
+        alert('공유 API 미지원. 결과가 클립보드에 복사되었습니다.');
+      }catch(e){
+        alert('공유 불가. 클립보드 복사도 실패했습니다.');
+      }
+    }
+  });
+
+  // keyboard shortcut (r)
+  document.addEventListener('keydown', (e)=>{
+    if(e.key.toLowerCase()==='r') drawBtn.click();
+  });
+
+  // 초기 랜덤 하나 표시(옵션)
+  // const init = pickRandom(); showResult(init);
+})();
+</script>
+</body>
+</html>
